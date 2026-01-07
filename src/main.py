@@ -168,7 +168,12 @@ def main():
             run_print_mode(agent, args.query, show_sql=args.show_sql)
         else:
             # Interactive mode
-            cli = CLIInterface(agent, show_sql=args.show_sql)
+            cli = CLIInterface(
+                agent, 
+                show_sql=args.show_sql,
+                model_name=config.get_model_name(),
+                suggested_models=config.get_suggested_models()
+            )
             if args.query:
                 # Start with initial query
                 cli.start(initial_query=args.query)

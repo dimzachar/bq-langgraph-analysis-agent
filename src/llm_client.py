@@ -1,11 +1,13 @@
 import time
 import logging
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from langchain_core.language_models.base import BaseLanguageModel
+
+from src.metrics import estimate_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -31,30 +33,68 @@ class LLMClient:
             fallback_model: Optional fallback model name (for OpenRouter)
         """
         self.provider = provider
+        self.model_name = model_name
+        self.api_key = api_key
+        self.openrouter_base_url = openrouter_base_url
         self.fallback_model_name = fallback_model
         
+        # Metrics tracking
+        self.last_prompt_tokens = 0
+        self.last_response_tokens = 0
+        self.call_count = 0
+        
         # Create primary model
+        self._init_model()
+    
+    def _init_model(self):
+        """Initialize or reinitialize the model."""
         primary_model = self._create_model(
-            provider=provider,
-            model_name=model_name,
-            api_key=api_key,
-            openrouter_base_url=openrouter_base_url
+            provider=self.provider,
+            model_name=self.model_name,
+            api_key=self.api_key,
+            openrouter_base_url=self.openrouter_base_url
         )
         
         # Add fallback if configured (only for OpenRouter currently)
-        if fallback_model and provider == "openrouter":
+        if self.fallback_model_name and self.provider == "openrouter":
             fallback = self._create_model(
                 provider="openrouter",
-                model_name=fallback_model,
-                api_key=api_key,
-                openrouter_base_url=openrouter_base_url
+                model_name=self.fallback_model_name,
+                api_key=self.api_key,
+                openrouter_base_url=self.openrouter_base_url
             )
-            # Use LangChain's built-in fallback mechanism
             self.model = primary_model.with_fallbacks([fallback])
-            logger.info(f"Initialized LLM with fallback: {model_name} -> {fallback_model}")
+            logger.info(f"Initialized LLM with fallback: {self.model_name} -> {self.fallback_model_name}")
         else:
             self.model = primary_model
-            logger.info(f"Initialized LLM client with provider: {provider}, model: {model_name}")
+            logger.info(f"Initialized LLM client with provider: {self.provider}, model: {self.model_name}")
+    
+    def switch_model(self, model_name: str) -> str:
+        """Switch to a different model.
+        
+        Args:
+            model_name: New model name to use.
+            
+        Returns:
+            The new model name
+        """
+        old_model = self.model_name
+        self.model_name = model_name
+        
+        try:
+            self._init_model()
+            self.reset_metrics()
+            logger.info(f"Switched model: {old_model} -> {model_name}")
+            return model_name
+        except Exception as e:
+            # Rollback on failure
+            self.model_name = old_model
+            self._init_model()
+            raise ValueError(f"Failed to switch to {model_name}: {e}")
+    
+    def get_model_name(self) -> str:
+        """Get current model name."""
+        return self.model_name or "unknown"
     
     def _create_model(
         self,
@@ -97,8 +137,28 @@ class LLMClient:
         Returns:
             The LLM's response as a string
         """
+        self.call_count += 1
+        self.last_prompt_tokens = estimate_tokens(prompt)
+        
         response = self.model.invoke([HumanMessage(content=prompt)])
-        return response.content
+        content = response.content
+        
+        self.last_response_tokens = estimate_tokens(content)
+        return content
+    
+    def get_last_call_tokens(self) -> Tuple[int, int]:
+        """Get token counts from last call.
+        
+        Returns:
+            Tuple of (prompt_tokens, response_tokens)
+        """
+        return self.last_prompt_tokens, self.last_response_tokens
+    
+    def reset_metrics(self):
+        """Reset call metrics."""
+        self.call_count = 0
+        self.last_prompt_tokens = 0
+        self.last_response_tokens = 0
     
     def invoke_with_retry(
         self,

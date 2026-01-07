@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List, Literal
 
 from langgraph.graph import StateGraph, END
@@ -11,6 +12,8 @@ from src.nodes.sql_generator import SQLGenerator
 from src.nodes.executor import QueryExecutor
 from src.nodes.analyzer import ResultAnalyzer
 from src.nodes.responder import ResponseGenerator
+from src.metrics import QueryMetrics, SessionMetrics, estimate_tokens
+from src.verbose import print_metrics, print_session_warning, is_verbose
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +52,10 @@ class DataAnalysisAgent:
         
         # Conversation history
         self.messages: List = []
+        
+        # Session metrics
+        self.session_metrics = SessionMetrics()
+        self.max_messages = 100  # Limit conversation history
     
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph state graph.
@@ -138,8 +145,18 @@ class DataAnalysisAgent:
         """
         logger.info(f"Processing query: {user_query[:50]}...")
         
+        # Start metrics tracking
+        query_metrics = QueryMetrics()
+        self.llm.reset_metrics()
+        
         # Add user message to history
         self.messages.append(HumanMessage(content=user_query))
+        
+        # Trim history if too long (prevents memory leak)
+        if len(self.messages) > self.max_messages:
+            # Keep first 2 (system context) and last N messages
+            self.messages = self.messages[:2] + self.messages[-(self.max_messages - 2):]
+            logger.info(f"Trimmed conversation history to {len(self.messages)} messages")
         
         # Create initial state
         state = create_initial_state(user_query, self.messages.copy())
@@ -155,6 +172,38 @@ class DataAnalysisAgent:
             # Add assistant message to history
             self.messages.append(AIMessage(content=response))
             
+            # Collect metrics
+            query_metrics.finish()
+            query_metrics.llm_calls = self.llm.call_count
+            query_metrics.prompt_tokens = estimate_tokens(str(state))
+            query_metrics.response_tokens = estimate_tokens(response)
+            
+            # Get rows returned if available
+            rows = 0
+            if final_state.get("query_results"):
+                rows = final_state["query_results"].get("row_count", 0)
+                query_metrics.rows_returned = rows
+            
+            # Update session metrics
+            self.session_metrics.update(query_metrics, len(self.messages))
+            
+            # Display metrics in verbose mode
+            if is_verbose():
+                print_metrics(
+                    execution_time=query_metrics.total_time,
+                    tokens_used=query_metrics.total_tokens,
+                    llm_calls=query_metrics.llm_calls,
+                    context_messages=len(self.messages),
+                    rows=rows if rows else None
+                )
+                
+                # Warn about potential issues
+                if self.session_metrics.context_warning:
+                    print_session_warning(
+                        "Large context",
+                        f"{len(self.messages)} messages in history. Consider resetting with 'reset'."
+                    )
+            
             if return_sql:
                 return response, sql_query
             return response
@@ -168,6 +217,36 @@ class DataAnalysisAgent:
             return error_response
     
     def reset_conversation(self):
-        """Reset conversation history."""
+        """Reset conversation history and session metrics."""
         self.messages = []
-        logger.info("Conversation history reset")
+        self.session_metrics = SessionMetrics()
+        logger.info("Conversation history and metrics reset")
+    
+    def get_session_stats(self) -> dict:
+        """Get current session statistics.
+        
+        Returns:
+            Dict with session metrics
+        """
+        return {
+            "total_queries": self.session_metrics.total_queries,
+            "total_tokens": self.session_metrics.total_tokens,
+            "total_llm_calls": self.session_metrics.total_llm_calls,
+            "total_time": round(self.session_metrics.total_time, 2),
+            "context_messages": len(self.messages)
+        }
+    
+    def switch_model(self, model_name: str) -> str:
+        """Switch to a different LLM model.
+        
+        Args:
+            model_name: New model name
+            
+        Returns:
+            The new model name
+        """
+        return self.llm.switch_model(model_name)
+    
+    def get_model_name(self) -> str:
+        """Get current model name."""
+        return self.llm.get_model_name()

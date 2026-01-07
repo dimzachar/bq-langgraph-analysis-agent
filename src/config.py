@@ -19,7 +19,7 @@ class Config(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     
     # Fallback model settings (optional - used when primary model fails)
-    fallback_model: Optional[str] = None  # e.g., "google/gemini-2.0-flash-exp:free"
+    fallback_model: Optional[str] = None
     
     # BigQuery settings
     google_cloud_project: Optional[str] = None
@@ -28,6 +28,10 @@ class Config(BaseSettings):
     # Agent settings
     max_query_retries: int = 2
     query_timeout: int = 60
+    
+    # Suggested models for /model command (comma-separated, provider-specific)
+    suggested_models_gemini: str = "gemini-2.5-pro,gemini-2.5-flash,gemini-2.0-flash,gemini-2.5-flash-lite"
+    suggested_models_openrouter: str = "google/gemini-2.5-flash"
     
     model_config = {
         "env_file": ".env",
@@ -54,6 +58,14 @@ class Config(BaseSettings):
         elif self.llm_provider == "openrouter":
             return self.openrouter_model
         raise ValueError(f"Unknown provider: {self.llm_provider}")
+    
+    def get_suggested_models(self) -> list:
+        """Get list of suggested models for the current provider."""
+        if self.llm_provider == "gemini":
+            models_str = self.suggested_models_gemini
+        else:
+            models_str = self.suggested_models_openrouter
+        return [m.strip() for m in models_str.split(",") if m.strip()]
 
 
 def load_config() -> Config:

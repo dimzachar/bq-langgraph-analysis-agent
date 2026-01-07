@@ -123,3 +123,37 @@ def print_fallback(from_model: str, to_model: str):
     if not _verbose_enabled:
         return
     print(f"{_colorize('↪', 'warning')} Fallback: {from_model} → {to_model}")
+
+
+def print_metrics(
+    execution_time: float,
+    tokens_used: int,
+    llm_calls: int,
+    context_messages: int,
+    bq_time: float = None,
+    rows: int = None
+):
+    """Print execution metrics summary."""
+    if not _verbose_enabled:
+        return
+    
+    line = "─" * 50
+    print(f"\n{_colorize(line, 'dim')}")
+    print(f"{_colorize('📊 METRICS', 'bold')}")
+    print(f"  {_colorize('Time:', 'dim')} {execution_time:.2f}s total", end="")
+    if bq_time:
+        print(f" (BigQuery: {bq_time:.2f}s)")
+    else:
+        print()
+    print(f"  {_colorize('Tokens:', 'dim')} ~{tokens_used:,} estimated")
+    print(f"  {_colorize('LLM calls:', 'dim')} {llm_calls}")
+    print(f"  {_colorize('Context:', 'dim')} {context_messages} messages")
+    if rows is not None:
+        print(f"  {_colorize('Rows:', 'dim')} {rows}")
+    print(f"{_colorize(line, 'dim')}")
+
+
+def print_session_warning(warning_type: str, details: str):
+    """Print session-level warnings."""
+    print(f"\n{_colorize('⚠ WARNING:', 'warning')} {warning_type}")
+    print(f"  {_colorize(details, 'dim')}")
