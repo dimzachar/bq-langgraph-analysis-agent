@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Callable
 
 from src.state import AgentState
 from src.verbose import (
@@ -21,17 +21,19 @@ Please fix the SQL query. Return ONLY the corrected SQL, no explanations.
 class QueryExecutor:
     """Executes SQL queries against BigQuery."""
     
-    def __init__(self, bq_client, llm_client, max_retries: int = 2):
+    def __init__(self, bq_client, llm_client, max_retries: int = 2, sql_validator: Callable[[str], bool] = None):
         """Initialize executor.
         
         Args:
             bq_client: BigQuery client for query execution
             llm_client: LLM client for SQL correction
             max_retries: Maximum retry attempts for failed queries
+            sql_validator: Optional function to validate SQL before execution
         """
         self.bq_client = bq_client
         self.llm = llm_client
         self.max_retries = max_retries
+        self.sql_validator = sql_validator
     
     def execute(self, state: AgentState) -> dict:
         """Execute SQL and store results in state.
@@ -77,6 +79,12 @@ class QueryExecutor:
                     print_retry(retry_count + 1, self.max_retries, "SQL error, attempting fix...")
                     fixed_sql = self._attempt_fix(sql, error_msg)
                     if fixed_sql and fixed_sql != sql:
+                        # Validate fixed SQL before using it
+                        if self.sql_validator and not self.sql_validator(fixed_sql):
+                            logger.warning("Fixed SQL failed validation, rejecting")
+                            print_error("Fixed SQL contains unauthorized operations")
+                            retry_count += 1
+                            continue
                         print_step("LLM suggested SQL fix")
                         print_sql(fixed_sql)
                         sql = fixed_sql

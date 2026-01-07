@@ -35,7 +35,12 @@ class DataAnalysisAgent:
         self.router = QueryRouter(llm_client)
         self.planner = QueryPlanner(llm_client, schema_cache)
         self.sql_generator = SQLGenerator(llm_client, schema_cache, bq_client.dataset_id)
-        self.executor = QueryExecutor(bq_client, llm_client, max_retries)
+        self.executor = QueryExecutor(
+            bq_client, 
+            llm_client, 
+            max_retries,
+            sql_validator=self.sql_generator.validate_tables
+        )
         self.analyzer = ResultAnalyzer(llm_client)
         self.responder = ResponseGenerator(llm_client, schema_cache)
         
