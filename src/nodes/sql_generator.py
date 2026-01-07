@@ -23,7 +23,10 @@ IMPORTANT RULES:
 
 User Query: {query}
 
-Generate a single SQL query to answer this question.
+Execution Plan:
+{execution_plan}
+
+Follow the execution plan above to generate a single SQL query.
 Return ONLY the SQL query, no explanations.
 """
 
@@ -66,9 +69,13 @@ class SQLGenerator:
         
         try:
             schema_info = self.schema_cache.get_schema_prompt()
+            execution_plan = state.get("execution_plan", [])
+            plan_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(execution_plan)) if execution_plan else "No specific plan - generate appropriate SQL"
+            
             prompt = SQL_GENERATOR_PROMPT.format(
                 schema_info=schema_info,
-                query=query
+                query=query,
+                execution_plan=plan_text
             )
             
             response = self.llm.invoke_with_retry(prompt)
