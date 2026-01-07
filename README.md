@@ -1,37 +1,10 @@
 # Data Analysis Agent
 
-A CLI-based conversational AI agent for analyzing e-commerce data from Google BigQuery's public dataset using LangGraph and Google Gemini.
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CLI Interface                             │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     LangGraph Agent                              │
-│  ┌─────────┐  ┌─────────┐  ┌───────────┐  ┌──────────┐         │
-│  │ Router  │→ │ Planner │→ │SQL Gen    │→ │ Executor │         │
-│  └─────────┘  └─────────┘  └───────────┘  └──────────┘         │
-│       │                                         │               │
-│       │            ┌──────────┐  ┌───────────┐  │               │
-│       └──────────→ │ Analyzer │→ │ Responder │←─┘               │
-│                    └──────────┘  └───────────┘                  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              ▼               ▼               ▼
-        ┌──────────┐   ┌───────────┐   ┌─────────────┐
-        │   LLM    │   │ BigQuery  │   │Schema Cache │
-        │(Gemini)  │   │  Client   │   │             │
-        └──────────┘   └───────────┘   └─────────────┘
-```
+A CLI-based AI agent for analyzing e-commerce data from Google BigQuery's public dataset using LangGraph and LLMs.
 
 ## Features
 
-- **Natural Language Queries**: Ask questions about e-commerce data in plain English
+- **Natural Language Queries**: Ask questions about e-commerce data
 - **Dynamic SQL Generation**: Automatically constructs BigQuery SQL from your questions
 - **Multiple Analysis Types**:
   - Customer segmentation and behavior
@@ -39,8 +12,14 @@ A CLI-based conversational AI agent for analyzing e-commerce data from Google Bi
   - Sales trends and seasonality
   - Geographic patterns
   - Database schema exploration
+- **Conversation Memory**: Maintains context across follow-up questions (max 100 messages, auto-trimmed)
 - **Error Recovery**: Automatic SQL correction and retry on failures
-- **Dual LLM Support**: Google Gemini (default) or OpenRouter
+- **Dual LLM Support**: Google Gemini or OpenRouter (select provider)
+
+## Architecture
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture documentation.
+
 
 ## Setup
 
@@ -51,6 +30,14 @@ Using `uv` (recommended):
 ```bash
 # Install uv if not already installed
 # See: https://docs.astral.sh/uv/getting-started/installation/
+
+# Windows (PowerShell):
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Linux/Mac:
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Restart terminal after installation
 
 # Create virtual environment and install dependencies
 uv venv .venv
@@ -131,51 +118,27 @@ python -m src.main -p "What are the top 10 products?"
 # Show agent decision flow (recommended for understanding the pipeline)
 python -m src.main --verbose "What are the top 10 products?"
 
-# Full debug logging (HTTP requests, etc. - for troubleshooting)
+# Full debug logging
 python -m src.main --debug "What are the top 10 products?"
 
 # Show generated SQL queries
 python -m src.main --show-sql "What are the top 10 products?"
 ```
 
-**Verbose output example:**
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ROUTER
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Classifying: "What are the top 10 products?"
-→ Decision: analysis
-  Will generate SQL and analyze data
+### CLI Commands
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  SQL GENERATOR
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Generating SQL from natural language...
-SQL Query:
-  SELECT p.name, COUNT(*) as order_count
-  FROM `bigquery-public-data.thelook_ecommerce.order_items` oi
-  JOIN `bigquery-public-data.thelook_ecommerce.products` p
-  ON oi.product_id = p.id
-  GROUP BY p.name
-  ORDER BY order_count DESC
-  LIMIT 10
-✓ SQL generated successfully
-```
+Use slash commands:
 
-### Query Examples
+- `/help` - Show available commands
+- `/model <name>` - Switch LLM model at runtime
+- `/reset` - Clear conversation history
+- `/stats` - Show session statistics (tokens, queries, time)
+- `/sql` - Toggle SQL query display
+- `/exit` - Exit the application
 
-```
-You: What are the top 5 product categories by revenue?
+### Example Run
 
-Agent: Based on the analysis, here are the top 5 product categories by revenue:
-1. Outerwear & Coats - $2.3M
-2. Jeans - $1.8M
-...
-
-You: Show me customer distribution by country
-
-You: What tables are in the database?
-```
+See [example.md](example.md) for a full session transcript.
 
 ## Running Tests
 
@@ -222,17 +185,19 @@ pytest tests/property/test_cli.py -v
 └── README.md
 ```
 
-## Technology Stack
+## Technnology Stack
 
-- **Agent Framework**: LangGraph v1
-- **LLM**: Google Gemini 1.5 Flash (or OpenRouter)
-- **Data Warehouse**: Google BigQuery
-- **Testing**: Hypothesis (property-based) + pytest
-- **Configuration**: pydantic-settings + python-dotenv
+| Component | Choice | Why |
+|-----------|--------|-----|
+| Agent Framework | LangGraph v1 | Explicit graph-based control flow. Simpler deterministic paths per query type instead of hybrid workflow + loop architecture. Easier to debug/test, and testing showed it handles most queries well. |
+| LLM | Gemini and Openrouter providers | Free tier, 1M token context (fits full schema + history), same GCP ecosystem as BigQuery. OpenRouter supported too. |
+| Data Warehouse | BigQuery | the `thelook_ecommerce` dataset lives there. |
+| Package Manager | uv | Fast dependency resolution, reproducible builds via `uv.lock`. |
+
 
 ## Security
 
-The agent only talks to the e-commerce dataset and won't try to run anything dangerous. It checks every SQL query before execution, if someone tries to sneak in a `DROP TABLE` or access tables outside the allowed list (`orders`, `order_items`, `products`, `users`), it gets blocked. Prompt injection attempts are ignored.
+The agent only talks to the e-commerce dataset and won't try to run anything dangerous. It checks every SQL query before execution, if someone tries to sneak in a `DROP TABLE` or access tables outside the allowed list (`orders`, `order_items`, `products`, `users`), it gets blocked. Prompt injection attempts were ignored when tested.
 
 ## Hallucination Prevention
 
@@ -246,10 +211,12 @@ The agent uses several strategies to prevent LLM hallucination in responses:
 
 - Model Fallback: If the primary LLM fails (rate limits, errors), automatically falls back to a secondary model.
 
+- Post-validation: The Responder checks numbers in the generated response against actual query results and logs warnings if potential hallucinations are detected.
+
 
 ## Future Possible Improvements
 
 - `init_chat_model`: Simplify LLM setup in `llm_client.py` with one function instead of separate provider classes
-- `Runtime` context: Let users switch models mid-session without restarting the CLI
 - `InMemorySaver` checkpointer: could add short-term memory (RAM, resets on restart) for thread IDs and checkpointing. Long term (persistence across restarts, session stored) not needed-adds more complexity for this case
 - Self-reflection: Add a node that validates response accuracy
+- For production scenarios requiring higher reliability, a two-layer hybrid architecture (workflow + agent loop) could improve handling of edge cases: on-demand schema discovery via tool calls (vs pre-loaded schema in prompts), flexible iteration without fixed retry limits, better multi-step query chaining where step 2 depends on step 1's result, orchestrator with parallel worker dispatch for multi-insight reports
