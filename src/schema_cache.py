@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, List, Any, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -30,17 +31,26 @@ class SchemaCache:
         self._loaded = False
     
     def load_all_schemas(self) -> None:
-        """Load schemas for all allowed tables."""
+        """Load schemas for all allowed tables in parallel."""
         logger.info("Loading schemas for all tables...")
         
-        for table_name in ALLOWED_TABLES:
-            try:
-                schema = self.bq_client.get_table_schema(table_name)
-                self.schemas[table_name] = schema
-                logger.info(f"Loaded schema for table: {table_name}")
-            except Exception as e:
-                logger.error(f"Failed to load schema for {table_name}: {e}")
-                raise
+        def fetch_schema(table_name: str):
+            schema = self.bq_client.get_table_schema(table_name)
+            logger.info(f"Loaded schema for table: {table_name}")
+            return table_name, schema
+        
+        # Fetch all schemas in parallel
+        with ThreadPoolExecutor(max_workers=len(ALLOWED_TABLES)) as executor:
+            futures = {executor.submit(fetch_schema, table): table for table in ALLOWED_TABLES}
+            
+            for future in as_completed(futures):
+                table_name = futures[future]
+                try:
+                    name, schema = future.result()
+                    self.schemas[name] = schema
+                except Exception as e:
+                    logger.error(f"Failed to load schema for {table_name}: {e}")
+                    raise
         
         self._loaded = True
         logger.info("All schemas loaded successfully")

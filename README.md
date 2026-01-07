@@ -37,11 +37,13 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 # Linux/Mac:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Restart terminal after installation
+# Add to PATH , Restart terminal/ide after installation
 
 # Create virtual environment and install dependencies
 uv venv .venv
-uv sync --extra dev  # installs all deps including test tools
+uv sync              # core dependencies only (to run the agent)
+# OR
+uv sync --extra dev  # includes test tools (pytest, coverage, hypothesis)
 
 # Activate the virtual environment
 # Windows:
