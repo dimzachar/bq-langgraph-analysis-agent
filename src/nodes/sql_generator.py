@@ -144,25 +144,57 @@ class SQLGenerator:
         return sql
     
     def validate_tables(self, sql: str) -> bool:
-        """Check if SQL only references allowed tables.
+        """Check if SQL only references allowed tables and has no dangerous operations.
         
         Args:
             sql: SQL query string
             
         Returns:
-            True if only allowed tables are referenced
+            True if only allowed tables are referenced and no dangerous operations
         """
-        # Extract table references from SQL
-        # This is a simplified check
         sql_upper = sql.upper()
         
-        # Look for FROM and JOIN clauses
-        # Handle fully qualified BigQuery tables: `project.dataset.table`
-        table_pattern = r'(?:FROM|JOIN)\s+[`"]?(?:[\w-]+\.)*(\w+)[`"]?'
-        matches = re.findall(table_pattern, sql, re.IGNORECASE)
+        # 
+        # Block dangerous operations
+        # Note: These would likely fail anyway due to BigQuery IAM
+        # permissions (read-only access) and the fact that we're
+        # querying a public dataset. Added as a safety net in case
+        # permissions change or the agent is used with other datasets.
+        # 
+
+        dangerous_keywords = [
+            'INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE',
+            'CREATE', 'ALTER', 'GRANT', 'REVOKE', 'EXECUTE', 'MERGE'
+        ]
+        for keyword in dangerous_keywords:
+            if re.search(rf'\b{keyword}\b', sql_upper):
+                logger.warning(f"Dangerous keyword detected: {keyword}")
+                return False
         
-        for table in matches:
-            if table.lower() not in ALLOWED_TABLES:
+        # 
+        # Block system table access to prevent discovering other tables/datasets in the project
+        # 
+        if 'INFORMATION_SCHEMA' in sql_upper or '__TABLES__' in sql_upper:
+            logger.warning("System table access blocked")
+            return False
+        
+        # Extract table references from multiple SQL patterns
+        # This catches bypass attempts via UNION, subqueries, and CTEs
+        # that the original simple FROM/JOIN regex would miss.
+        # 
+        table_patterns = [
+            r'(?:FROM|JOIN)\s+[`"]?(?:[\w-]+\.)*(\w+)[`"]?',  # FROM/JOIN clauses
+            r'UNION\s+(?:ALL\s+)?SELECT\s+.*?FROM\s+[`"]?(?:[\w-]+\.)*(\w+)[`"]?',  # UNION injection
+            r'\bWITH\s+\w+\s+AS\s*\(.*?FROM\s+[`"]?(?:[\w-]+\.)*(\w+)[`"]?',  # CTE injection
+        ]
+        
+        all_tables = set()
+        for pattern in table_patterns:
+            matches = re.findall(pattern, sql, re.IGNORECASE | re.DOTALL)
+            all_tables.update(t.lower() for t in matches if t)
+        
+        for table in all_tables:
+            if table not in ALLOWED_TABLES:
                 logger.warning(f"Invalid table reference: {table}")
                 return False
         

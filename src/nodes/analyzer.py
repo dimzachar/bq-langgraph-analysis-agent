@@ -10,6 +10,11 @@ ANALYZER_PROMPT = """You are a data analyst for an e-commerce business.
 
 User Question: {query}
 
+Executed SQL Query:
+```sql
+{sql_query}
+```
+
 Query Results ({row_count} rows):
 {results_preview}
 
@@ -18,6 +23,8 @@ Analyze these results and provide:
 2. Notable patterns or trends
 3. Actionable recommendations
 
+IMPORTANT: Base your analysis ONLY on the actual SQL query and results shown above.
+If the user asked about tables/data that weren't queried, note what was actually analyzed.
 Be specific and reference the actual data values.
 Keep your analysis concise but insightful.
 """
@@ -45,6 +52,7 @@ class ResultAnalyzer:
         """
         results = state.get("query_results")
         query = state["current_query"]
+        sql_query = state.get("sql_query", "No SQL available")
         
         if not results:
             logger.info("No results to analyze")
@@ -61,6 +69,7 @@ class ResultAnalyzer:
             
             prompt = ANALYZER_PROMPT.format(
                 query=query,
+                sql_query=sql_query,
                 row_count=results.get("row_count", 0),
                 results_preview=results_preview
             )

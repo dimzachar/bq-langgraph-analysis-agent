@@ -14,6 +14,12 @@ Query Type: {query_type}
 
 {context}
 
+IMPORTANT RULES:
+1. Only reference tables and data that were ACTUALLY queried (shown in "Executed SQL" above)
+2. If the user asked about tables that don't exist, clarify what was actually queried
+3. Never pretend to have queried tables that aren't in the executed SQL
+4. Use EXACT values from the actual data - do not make up numbers
+
 Generate a clear, helpful response for the user.
 If there's analysis, summarize the key insights.
 If there's an error, explain it in user-friendly terms.
@@ -94,7 +100,10 @@ class ResponseGenerator:
     
     def _generate_analysis_response(self, state: AgentState) -> str:
         """Generate response for analysis queries."""
-        context = f"Analysis:\n{state['analysis']}"
+        # Include the actual SQL so LLM knows what was really queried
+        sql_query = state.get("sql_query", "")
+        context = f"Executed SQL:\n```sql\n{sql_query}\n```\n\n"
+        context += f"Analysis:\n{state['analysis']}"
         
         # Include actual data so LLM doesn't hallucinate values
         actual_numbers: Set[str] = set()
