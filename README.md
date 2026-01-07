@@ -230,28 +230,26 @@ pytest tests/property/test_cli.py -v
 - **Testing**: Hypothesis (property-based) + pytest
 - **Configuration**: pydantic-settings + python-dotenv
 
+## Security
+
+The agent only talks to the e-commerce dataset and won't try to run anything dangerous. It checks every SQL query before execution, if someone tries to sneak in a `DROP TABLE` or access tables outside the allowed list (`orders`, `order_items`, `products`, `users`), it gets blocked. Prompt injection attempts are ignored.
+
 ## Hallucination Prevention
 
 The agent uses several strategies to prevent LLM hallucination in responses:
 
-1. **Actual Data Injection**: The Responder node passes the exact query results to the LLM, not just summaries. This ensures the LLM has access to real values.
+- Actual Data Injection: The Responder node passes the exact query results to the LLM, not just summaries. This ensures the LLM has access to real values.
 
-2. **Explicit Instructions**: The prompt includes "Use the EXACT values from the data above. Do not make up or approximate numbers."
+- Explicit Instructions: The prompt includes "Use the EXACT values from the data above. Do not make up or approximate numbers."
 
-3. **SQL Retry with Fix**: When SQL fails, the Executor asks the LLM to fix the query based on the actual error message, then retries (up to 2 attempts).
+- SQL Retry with Fix: When SQL fails, the Executor asks the LLM to fix the query based on the actual error message, then retries (up to 2 attempts).
 
-4. **Model Fallback**: If the primary LLM fails (rate limits, errors), automatically falls back to a secondary model.
+- Model Fallback: If the primary LLM fails (rate limits, errors), automatically falls back to a secondary model.
 
-### Future Validation Options
 
-| Approach | Description | Status |
-|----------|-------------|--------|
-| Post-validation | Compare numbers in response against actual results | Planned |
-| Structured output | Use Pydantic models to enforce exact data | Planned |
-| Self-reflection | Add a node that validates response accuracy | Planned |
-
-## Future Improvements from LangGraph V1
+## Future Possible Improvements
 
 - `init_chat_model`: Simplify LLM setup in `llm_client.py` with one function instead of separate provider classes
 - `Runtime` context: Let users switch models mid-session without restarting the CLI
 - `InMemorySaver` checkpointer: could add short-term memory (RAM, resets on restart) for thread IDs and checkpointing. Long term (persistence across restarts, session stored) not needed-adds more complexity for this case
+- Self-reflection: Add a node that validates response accuracy
