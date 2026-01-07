@@ -178,14 +178,21 @@ class SQLGenerator:
             logger.warning("System table access blocked")
             return False
         
-        # Extract table references from multiple SQL patterns
-        # This catches bypass attempts via UNION, subqueries, and CTEs
-        # that the original simple FROM/JOIN regex would miss.
-        # 
+        # Extract CTE names first (these are valid references within the query)
+        cte_pattern = r'\bWITH\s+(\w+)\s+AS\s*\('
+        cte_names = set(m.lower() for m in re.findall(cte_pattern, sql, re.IGNORECASE))
+        
+        # Also find chained CTEs: , cte_name AS (
+        chained_cte_pattern = r',\s*(\w+)\s+AS\s*\('
+        cte_names.update(m.lower() for m in re.findall(chained_cte_pattern, sql, re.IGNORECASE))
+        
+        logger.debug(f"Found CTE names: {cte_names}")
+        
+        # Extract table references from SQL patterns
+        # This catches bypass attempts via UNION and subqueries
         table_patterns = [
             r'(?:FROM|JOIN)\s+[`"]?(?:[\w-]+\.)*(\w+)[`"]?',  # FROM/JOIN clauses
             r'UNION\s+(?:ALL\s+)?SELECT\s+.*?FROM\s+[`"]?(?:[\w-]+\.)*(\w+)[`"]?',  # UNION injection
-            r'\bWITH\s+\w+\s+AS\s*\(.*?FROM\s+[`"]?(?:[\w-]+\.)*(\w+)[`"]?',  # CTE injection
         ]
         
         all_tables = set()
@@ -193,9 +200,15 @@ class SQLGenerator:
             matches = re.findall(pattern, sql, re.IGNORECASE | re.DOTALL)
             all_tables.update(t.lower() for t in matches if t)
         
-        for table in all_tables:
+        # Remove CTE names from table references (they're valid internal references)
+        external_tables = all_tables - cte_names
+        
+        logger.debug(f"Extracted tables from SQL: {all_tables}")
+        logger.debug(f"External tables (excluding CTEs): {external_tables}")
+        
+        for table in external_tables:
             if table not in ALLOWED_TABLES:
-                logger.warning(f"Invalid table reference: {table}")
+                logger.warning(f"Invalid table reference: {table}. Allowed: {ALLOWED_TABLES}")
                 return False
         
         return True
