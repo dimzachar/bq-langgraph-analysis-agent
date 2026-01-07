@@ -1,6 +1,7 @@
 import sys
 import logging
 import shutil
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -12,8 +13,6 @@ CYAN = "\033[36m"
 GREEN = "\033[32m"
 YELLOW = "\033[33m"
 BLUE = "\033[34m"
-MAGENTA = "\033[35m"
-BG_DARK = "\033[48;5;236m"
 
 
 def supports_color() -> bool:
@@ -214,8 +213,6 @@ class CLIInterface:
 
     def _process_query(self, query: str):
         """Process a user query."""
-        import time
-        
         print(f"\n{c('Thinking...', DIM)}", end="", flush=True)
         start = time.time()
         

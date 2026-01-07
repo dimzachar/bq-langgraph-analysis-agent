@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
