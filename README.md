@@ -13,7 +13,7 @@ A CLI-based AI agent for analyzing e-commerce data from Google BigQuery's public
   - Geographic patterns
   - Database schema exploration
 - **Conversation Memory**: Maintains context across follow-up questions (max 100 messages, auto-trimmed)
-- **Error Recovery**: Automatic SQL correction and retry on failures
+- **Error Recovery**: Automatic SQL correction and retry on failures with exponential backoff
 - **Dual LLM Support**: Google Gemini or OpenRouter (select provider)
 
 ## Architecture
@@ -168,7 +168,7 @@ pytest tests/property/test_cli.py -v
 │   ├── config.py         # Configuration
 │   ├── agent.py          # LangGraph agent
 │   ├── state.py          # Agent state
-│   ├── schema_cache.py   # Schema caching
+│   ├── schema_cache.py   # Schema caching (loads all table schemas at startup in parallel, provides formatted schema context to LLM nodes)
 │   ├── llm_client.py     # LLM wrapper
 │   ├── bq_client.py      # BigQuery client
 │   └── nodes/
@@ -201,6 +201,14 @@ pytest tests/property/test_cli.py -v
 
 The agent only talks to the e-commerce dataset and won't try to run anything dangerous. It checks every SQL query before execution, if someone tries to sneak in a `DROP TABLE` or access tables outside the allowed list (`orders`, `order_items`, `products`, `users`), it gets blocked. Prompt injection attempts were ignored when tested.
 
+## Error Handling & Reliability
+
+- SQL Retry with Fix: When SQL fails, the Executor asks the LLM to fix the query based on the actual error message, then retries (up to 2 attempts).
+
+- Exponential Backoff: LLM calls use exponential backoff for rate limit handling (starts at 1s, doubles up to 30s max, 3 retries).
+
+- Model Fallback: If the primary LLM fails (rate limits, errors), automatically falls back to a secondary model.
+
 ## Hallucination Prevention
 
 The agent uses several strategies to prevent LLM hallucination in responses:
@@ -208,10 +216,6 @@ The agent uses several strategies to prevent LLM hallucination in responses:
 - Actual Data Injection: The Responder node passes the exact query results to the LLM, not just summaries. This ensures the LLM has access to real values.
 
 - Explicit Instructions: The prompt includes "Use the EXACT values from the data above. Do not make up or approximate numbers."
-
-- SQL Retry with Fix: When SQL fails, the Executor asks the LLM to fix the query based on the actual error message, then retries (up to 2 attempts).
-
-- Model Fallback: If the primary LLM fails (rate limits, errors), automatically falls back to a secondary model.
 
 - Post-validation: The Responder checks numbers in the generated response against actual query results and logs warnings if potential hallucinations are detected.
 
