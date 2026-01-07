@@ -221,4 +221,6 @@ The agent uses several strategies to prevent LLM hallucination in responses:
 - `init_chat_model`: Simplify LLM setup in `llm_client.py` with one function instead of separate provider classes
 - `InMemorySaver` checkpointer: could add short-term memory (RAM, resets on restart) for thread IDs and checkpointing. Long term (persistence across restarts, session stored) not needed-adds more complexity for this case
 - Self-reflection: Add a node that validates response accuracy
+- Merge/combine nodes to reduce LLM calls and make it faster
+- Add streaming responses to 'feel' faster
 - For production scenarios requiring higher reliability, a two-layer hybrid architecture (workflow + agent loop) could improve handling of edge cases: on-demand schema discovery via tool calls (vs pre-loaded schema in prompts), flexible iteration without fixed retry limits, better multi-step query chaining where step 2 depends on step 1's result, orchestrator with parallel worker dispatch for multi-insight reports
