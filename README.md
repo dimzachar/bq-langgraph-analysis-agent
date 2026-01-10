@@ -87,6 +87,7 @@ Edit `.env` with your settings:
 LLM_PROVIDER=gemini
 
 # Google Gemini (get key from https://aistudio.google.com/apikey)
+# Free tier available with rate limits (RPM/TPM/RPD). See "Gemini API Rate Limits" section below.
 GOOGLE_API_KEY=your_api_key_here
 
 # GCP Project ID (required for BigQuery)
@@ -219,6 +220,27 @@ The agent uses several strategies to prevent LLM hallucination in responses:
 
 - Post-validation: The Responder checks numbers in the generated response against actual query results and logs warnings if potential hallucinations are detected.
 
+
+## Gemini API Rate Limits & Pricing
+
+The Gemini API has [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) measured across three dimensions:
+
+- **RPM** - Requests per minute
+- **TPM** - Tokens per minute (input)
+- **RPD** - Requests per day
+
+### Usage Tiers
+
+| Tier | Qualifications |
+|------|----------------|
+| Free | Users in [eligible countries](https://ai.google.dev/gemini-api/docs/available-regions) |
+| Tier 1 | Paid billing account [linked to project](https://ai.google.dev/gemini-api/docs/billing#enable-cloud-billing) |
+| Tier 2 | Total spend > $250 and 30+ days since first payment |
+| Tier 3 | Total spend > $1,000 and 30+ days since first payment |
+
+Gemini models are available on the free tier with lower rate limits. Higher tiers unlock increased limits.
+
+[View your active rate limits in AI Studio](https://aistudio.google.com/usage?timeRange=last-28-days&tab=rate-limit) | [Pricing details](https://ai.google.dev/pricing)
 
 ## Future Possible Improvements
 
